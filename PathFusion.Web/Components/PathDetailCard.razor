@@ -1,0 +1,65 @@
+﻿@using PathFusion.Core.Models
+@using PathFusion.Core.Data
+
+<div class="detail-card">
+    <div class="card-title">@Title</div>
+
+    <div class="detail-row">
+        <span class="label">Distance:</span>
+        <span class="value">@Path.TotalDistance km</span>
+    </div>
+
+    <div class="detail-row">
+        <span class="label">Duration:</span>
+        <span class="value">@FormatDuration(Path.TotalDuration)</span>
+    </div>
+
+    <div class="detail-row">
+        <span class="label">Cost:</span>
+        <span class="value">PKR @Path.TotalCost:N0</span>
+    </div>
+
+    <div class="detail-row">
+        <span class="label">CO2:</span>
+        <span class="value">@Path.TotalEmissions g</span>
+    </div>
+
+    <div class="route-sequence">
+        <h4>Route:</h4>
+        <div class="cities-list">
+            @foreach (var cityId in Path.CitySequence)
+            {
+                <div class="city-badge">@GetCityName(cityId)</div>
+            }
+        </div>
+    </div>
+
+    <button class="btn-select" @onclick="SelectRoute">Select Route →</button>
+</div>
+
+
+@code {
+    [Parameter]
+    public Path? Path { get; set; }
+
+    [Parameter]
+    public required string Title { get; set; }
+
+    private string FormatDuration(int minutes)
+    {
+        var hours = minutes / 60;
+        var mins = minutes % 60;
+        return hours > 0 ? $"{hours}h {mins}m" : $"{mins}m";
+    }
+
+    private string GetCityName(int cityId)
+    {
+        var cities = PakistanCitiesData.GetAllCities();
+        return cities.FirstOrDefault(c => c.Id == cityId)?.Name ?? "Unknown";
+    }
+
+    private async Task SelectRoute()
+    {
+        await Task.CompletedTask;
+    }
+}

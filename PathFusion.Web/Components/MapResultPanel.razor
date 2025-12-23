@@ -1,0 +1,67 @@
+﻿@using PathFusion.Core.Models
+
+<div class="result-panel glass">
+    <div class="result-header">
+        <h3>🗺️ Route Results</h3>
+        <button class="close-btn" @onclick="OnClose">✕</button>
+    </div>
+
+    @if (Result == null)
+    {
+        <p class="loading">Loading results...</p>
+    }
+    else if (!Result.Success)
+    {
+        <div class="error-state">
+            <p>❌ @Result.ErrorMessage</p>
+        </div>
+    }
+    else
+    {
+        <div class="results-tabs">
+            <button class="tab-btn @(ActiveTab == "shortest" ? "active" : "")" 
+                    @onclick="@(() => SetActiveTab("shortest"))">
+                📏 Shortest
+            </button>
+            <button class="tab-btn @(ActiveTab == "fastest" ? "active" : "")" 
+                    @onclick="@(() => SetActiveTab("fastest"))">
+                ⚡ Fastest
+            </button>
+            <button class="tab-btn @(ActiveTab == "cheapest" ? "active" : "")" 
+                    @onclick="@(() => SetActiveTab("cheapest"))">
+                💰 Cheapest
+            </button>
+        </div>
+
+        <div class="tab-content">
+            @if (ActiveTab == "shortest" && Result.ShortestPath != null)
+            {
+                <PathDetailCard Path="Result.ShortestPath" Title="Shortest Route" />
+            }
+            else if (ActiveTab == "fastest" && Result.FastestPath != null)
+            {
+                <PathDetailCard Path="Result.FastestPath" Title="Fastest Route" />
+            }
+            else if (ActiveTab == "cheapest" && Result.CheapestPath != null)
+            {
+                <PathDetailCard Path="Result.CheapestPath" Title="Cheapest Route" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public PathResult? Result { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    private string ActiveTab = "shortest";
+
+    private void SetActiveTab(string tab)
+    {
+        ActiveTab = tab;
+        StateHasChanged();
+    }
+}
