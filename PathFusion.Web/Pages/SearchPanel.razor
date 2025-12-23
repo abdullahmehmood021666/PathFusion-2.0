@@ -1,0 +1,351 @@
+﻿@using System.Collections.Generic
+@using System.Linq
+
+<div class="search-container">
+    <div class="search-header">
+        <h2>🔍 Route Finder</h2>
+        <p>Find optimal routes</p>
+    </div>
+
+    <div class="search-box">
+        <input type="text"
+               class="search-input"
+               placeholder="Search cities..."
+               @bind="SearchQuery"
+               @oninput="HandleSearchInput"
+               @ref="SearchInput"
+               autocomplete="off" />
+        <span class="search-icon">🔎</span>
+    </div>
+
+    @if (ShowSuggestions && FilteredCities.Count > 0)
+    {
+        <div class="suggestions-dropdown">
+            @foreach (var city in FilteredCities)
+            {
+                <div class="suggestion-item" @onclick="@(() => SelectCityFromDropdown(city))">
+                    <span class="city-name">📍 @city.Name</span>
+                    <span class="city-province">@city.Province</span>
+                </div>
+            }
+        </div>
+    }
+
+    <div class="recent-routes">
+        <h3>📋 Recent Routes</h3>
+        @if (RecentRoutes.Count > 0)
+        {
+            <div class="routes-list">
+                @foreach (var route in RecentRoutes.Take(5))
+                {
+                    <div class="route-item glass" @onclick="@(() => CreateRouteFromRecent(route))">
+                        <div class="route-info">
+                            <span class="route-name">@route.FromCity → @route.ToCity</span>
+                            <span class="route-distance">@route.Distance km</span>
+                        </div>
+                        <span class="route-arrow">→</span>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <p class="empty-state">No recent routes yet</p>
+        }
+    </div>
+
+    <div class="quick-cities">
+        <h3>⭐ Major Cities</h3>
+        <div class="cities-grid">
+            @foreach (var city in AllCities.Take(8))
+            {
+                <button class="city-btn" @onclick="@(() => SelectCityFromButton(city))"
+                        style="border-color: @city.Color; color: @city.Color;">
+                    @city.Name
+                </button>
+            }
+        </div>
+    </div>
+
+    <div class="filter-section">
+        <h3>🚗 Transport Mode</h3>
+        <div class="filter-buttons">
+            <button class="filter-btn @(SelectedMode == "Road" ? "active" : "")"
+                    @onclick="@(() => SetMode("Road"))">
+                🚗 Road
+            </button>
+            <button class="filter-btn @(SelectedMode == "Rail" ? "active" : "")"
+                    @onclick="@(() => SetMode("Rail"))">
+                🚂 Rail
+            </button>
+            <button class="filter-btn @(SelectedMode == "Air" ? "active" : "")"
+                    @onclick="@(() => SetMode("Air"))">
+                ✈️ Air
+            </button>
+            <button class="filter-btn @(SelectedMode == "Multi" ? "active" : "")"
+                    @onclick="@(() => SetMode("Multi"))">
+                🌐 Multi
+            </button>
+        </div>
+    </div>
+
+    @if (SelectedFromCity != null)
+    {
+        <div class="route-preview glass">
+            <h3>🗺️ Route Planning</h3>
+            <div class="preview-item">
+                <span class="label">From:</span>
+                <span class="value">@SelectedFromCity.Name</span>
+            </div>
+            <div class="preview-item">
+                <span class="label">Mode:</span>
+                <span class="value">@SelectedMode</span>
+            </div>
+            <button class="select-to-btn" @onclick="FocusSearch">
+                Select Destination →
+            </button>
+            <button class="clear-btn" @onclick="ClearSelection">Clear</button>
+        </div>
+    }
+
+    <div class="action-buttons">
+        <button class="btn-primary" @onclick="FindOptimalRoute">
+            🚀 Find Best Route
+        </button>
+        <button class="btn-secondary" @onclick="ClearAll">
+            🔄 Reset
+        </button>
+    </div>
+</div>
+
+@code {
+    // --- PARAMETERS (EventCallbacks) ---
+    [Parameter]
+    public EventCallback<CityNode> OnCitySelected { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback<RouteVisualization> OnRouteCreated { get; set; } = default!;
+
+    // --- FIELDS ---
+    private string SearchQuery = "";
+    private bool ShowSuggestions = false;
+    private string SelectedMode = "Road";
+    private CityNode? SelectedFromCity;
+    private CityNode? SelectedToCity;
+    private ElementReference SearchInput;
+    private List<RecentRoute> RecentRoutes = new();
+    private List<CityNode> AllCities = new();
+    private List<CityNode> FilteredCities = new();
+
+    // --- DATA MODELS ---
+    public class CityNode
+    {
+        public required string Name { get; set; }
+        public required string Province { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public required string Color { get; set; }
+        public required string Population { get; set; }
+    }
+
+    public class RouteVisualization
+    {
+        public double FromX { get; set; }
+        public double FromY { get; set; }
+        public double ToX { get; set; }
+        public double ToY { get; set; }
+        public required string Color { get; set; }
+        public int Distance { get; set; }
+        public required string FromCity { get; set; }
+        public required string ToCity { get; set; }
+    }
+
+    public class RecentRoute
+    {
+        public required string FromCity { get; set; }
+        public required string ToCity { get; set; }
+        public int Distance { get; set; }
+        public required string Mode { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    // --- INITIALIZATION ---
+    protected override void OnInitialized()
+    {
+        InitializeCities();
+        LoadRecentRoutes();
+    }
+
+    private void InitializeCities()
+    {
+        AllCities = new List<CityNode>
+        {
+            new() { Name = "Karachi", Province = "Sindh", X = 380, Y = 600, Color = "#ef4444", Population = "16M" },
+            new() { Name = "Lahore", Province = "Punjab", X = 450, Y = 300, Color = "#f59e0b", Population = "11M" },
+            new() { Name = "Islamabad", Province = "Federal", X = 420, Y = 220, Color = "#3b82f6", Population = "2.1M" },
+            new() { Name = "Peshawar", Province = "KPK", X = 350, Y = 180, Color = "#10b981", Population = "2.3M" },
+            new() { Name = "Quetta", Province = "Balochistan", X = 250, Y = 400, Color = "#8b5cf6", Population = "1.1M" },
+            new() { Name = "Multan", Province = "Punjab", X = 420, Y = 420, Color = "#ec4899", Population = "1.9M" },
+            new() { Name = "Faisalabad", Province = "Punjab", X = 460, Y = 350, Color = "#14b8a6", Population = "3.2M" },
+            new() { Name = "Hyderabad", Province = "Sindh", X = 420, Y = 550, Color = "#f97316", Population = "1.8M" }
+        };
+    }
+
+    // --- SEARCH LOGIC ---
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        SearchQuery = e.Value?.ToString() ?? "";
+        ShowSuggestions = !string.IsNullOrWhiteSpace(SearchQuery);
+
+        if (ShowSuggestions)
+        {
+            FilteredCities = AllCities
+                .Where(c => c.Name.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+    }
+
+    // FIXED - LINE 84: Changed to async Task for EventCallback
+    private async Task SelectCityFromDropdown(CityNode city)
+    {
+        SelectedToCity = city;
+        SearchQuery = city.Name;
+        ShowSuggestions = false;
+        StateHasChanged();
+
+        if (SelectedFromCity != null)
+        {
+            await CreateRoute(SelectedFromCity, SelectedToCity);
+        }
+    }
+
+    private async Task SelectCityFromButton(CityNode city)
+    {
+        if (SelectedFromCity == null)
+        {
+            SelectedFromCity = city;
+        }
+        else if (SelectedFromCity.Name != city.Name)
+        {
+            SelectedToCity = city;
+            await CreateRoute(SelectedFromCity, SelectedToCity);
+        }
+        StateHasChanged();
+    }
+
+    private void SetMode(string mode)
+    {
+        SelectedMode = mode;
+        StateHasChanged();
+    }
+
+    public async Task FocusSearch()
+    {
+        await SearchInput.FocusAsync();
+    }
+
+    // FIXED - LINE 130: Changed to async Task for EventCallback
+    private async Task CreateRoute(CityNode from, CityNode to)
+    {
+        int distance = CalculateDistance(from, to);
+        var route = new RouteVisualization
+        {
+            FromX = from.X,
+            FromY = from.Y,
+            ToX = to.X,
+            ToY = to.Y,
+            Color = from.Color,
+            Distance = distance,
+            FromCity = from.Name,
+            ToCity = to.Name
+        };
+
+        await OnRouteCreated.InvokeAsync(route);
+
+        RecentRoutes.Insert(0, new RecentRoute
+        {
+            FromCity = from.Name,
+            ToCity = to.Name,
+            Distance = distance,
+            Mode = SelectedMode,
+            CreatedAt = DateTime.Now
+        });
+
+        SaveRecentRoutes();
+        ClearSelection();
+    }
+
+    // FIXED - LINE 131: Changed to async Task for EventCallback
+    private async Task CreateRouteFromRecent(RecentRoute recentRoute)
+    {
+        var fromCity = AllCities.FirstOrDefault(c => c.Name == recentRoute.FromCity);
+        var toCity = AllCities.FirstOrDefault(c => c.Name == recentRoute.ToCity);
+
+        if (fromCity != null && toCity != null)
+        {
+            await CreateRoute(fromCity, toCity);
+        }
+    }
+
+    private async Task FindOptimalRoute()
+    {
+        if (SelectedFromCity != null && SelectedToCity != null)
+        {
+            await CreateRoute(SelectedFromCity, SelectedToCity);
+        }
+    }
+
+    private void ClearSelection()
+    {
+        SelectedFromCity = null;
+        SelectedToCity = null;
+        SearchQuery = "";
+        ShowSuggestions = false;
+        StateHasChanged();
+    }
+
+    private void ClearAll()
+    {
+        ClearSelection();
+        RecentRoutes.Clear();
+        SaveRecentRoutes();
+    }
+
+    // --- DISTANCE CALCULATION ---
+    private int CalculateDistance(CityNode from, CityNode to)
+    {
+        var distances = new Dictionary<(string, string), int>
+        {
+            { ("Karachi", "Lahore"), 1237 },
+            { ("Lahore", "Islamabad"), 330 },
+            { ("Islamabad", "Peshawar"), 200 },
+            { ("Karachi", "Multan"), 750 },
+            { ("Lahore", "Faisalabad"), 170 },
+            { ("Karachi", "Hyderabad"), 160 },
+            { ("Quetta", "Karachi"), 700 },
+            { ("Peshawar", "Lahore"), 500 },
+            { ("Multan", "Lahore"), 280 },
+            { ("Faisalabad", "Multan"), 200 }
+        };
+
+        if (distances.ContainsKey((from.Name, to.Name)))
+            return distances[(from.Name, to.Name)];
+        if (distances.ContainsKey((to.Name, from.Name)))
+            return distances[(to.Name, from.Name)];
+
+        double dx = to.X - from.X;
+        double dy = to.Y - from.Y;
+        return (int)Math.Sqrt(dx * dx + dy * dy) * 5;
+    }
+
+    // --- STORAGE ---
+    private void LoadRecentRoutes()
+    {
+        RecentRoutes = new List<RecentRoute>();
+    }
+
+    private void SaveRecentRoutes()
+    {
+        // localStorage integration ready
+    }
+}

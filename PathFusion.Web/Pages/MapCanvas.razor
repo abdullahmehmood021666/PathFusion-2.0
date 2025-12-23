@@ -1,0 +1,281 @@
+﻿@using System.Collections.Generic
+@using System.Linq
+@inject NavigationManager Nav
+
+<div class="map-container">
+    <div class="map-canvas-wrapper">
+        <svg class="interactive-map" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid meet" style="pointer-events: auto;">
+            <defs>
+                <linearGradient id="mapGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#1e3a8a" />
+                    <stop offset="100%" stop-color="#0f172a" />
+                </linearGradient>
+                <filter id="glow">
+                    <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+                    <feMerge>
+                        <feMergeNode in="coloredBlur" />
+                        <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                </filter>
+            </defs>
+
+            <rect width="1200" height="800" fill="url(#mapGradient)" />
+
+            <path d="M 250,150 Q 300,140 350,145 L 400,150 Q 420,155 420,180 L 420,300 Q 415,350 400,380 Q 380,400 350,420 L 280,410 Q 250,400 240,370 L 230,250 Q 235,180 250,150 Z"
+                  fill="#334155" stroke="#475569" stroke-width="2" opacity="0.6" />
+            <path d="M 350,145 L 450,130 Q 500,135 520,160 L 480,200 Q 450,190 400,195 L 350,145 Z"
+                  fill="#334155" stroke="#475569" stroke-width="2" opacity="0.6" />
+            <path d="M 250,420 L 350,420 Q 380,430 390,470 L 350,490 Q 280,480 240,460 L 250,420 Z"
+                  fill="#334155" stroke="#475569" stroke-width="2" opacity="0.6" />
+
+            @foreach (var route in ActiveRoutes)
+            {
+                <g class="route-animation">
+                    <line x1="@route.FromX" y1="@route.FromY" x2="@route.ToX" y2="@route.ToY"
+                          stroke="#0ea5e9" stroke-width="3" opacity="0.2" stroke-linecap="round" />
+
+                    <line x1="@route.FromX" y1="@route.FromY" x2="@route.ToX" y2="@route.ToY"
+                          stroke="@route.Color" stroke-width="2.5" opacity="0.8"
+                          stroke-linecap="round" />
+
+                    <rect x="@((route.FromX + route.ToX) / 2 - 25)" y="@((route.FromY + route.ToY) / 2 - 15)" width="50" height="20" rx="4" fill="#0f172a" opacity="0.8" />
+
+                    <text x="@((route.FromX + route.ToX) / 2)" y="@((route.FromY + route.ToY) / 2)"
+                          text-anchor="middle" dominant-baseline="middle" fill="#fbbf24" style="font-size: 12px; font-weight: bold; pointer-events: none;">
+                        @route.Distance km
+                    </text>
+                </g>
+            }
+
+            @foreach (var city in Cities)
+            {
+                <g class="city-node" @onclick="@(() => SelectCity(city))" style="cursor: pointer;">
+
+                    <circle cx="@city.X" cy="@city.Y" r="@(city.IsSelected ? 45 : 35)"
+                            fill="none" stroke="@city.Color" stroke-width="2" opacity="0.3" />
+
+                    <circle cx="@city.X" cy="@city.Y" r="@(city.IsSelected ? 22 : 16)"
+                            fill="@city.Color" stroke="#fff" stroke-width="2"
+                            filter="url(#glow)" />
+
+                    <text x="@city.X" y="@(city.Y - 50)" text-anchor="middle" fill="#f1f5f9" style="pointer-events: none;">
+                        @city.Name
+                    </text>
+
+                    <text x="@city.X" y="@(city.Y + 60)" text-anchor="middle" fill="#fbbf24" style="pointer-events: none; display: @(city.IsSelected ? "block" : "none");">
+                        @city.Province
+                    </text>
+                </g>
+            }
+
+            @foreach (var vehicle in Vehicles)
+            {
+                <g class="vehicle-marker">
+                    <circle cx="@vehicle.X" cy="@vehicle.Y" r="6" fill="@vehicle.Color" stroke="#fff" stroke-width="1.5" filter="url(#glow)" />
+                    <path d="M @vehicle.X,@(vehicle.Y - 8) L @(vehicle.X + 5),@(vehicle.Y + 3) L @(vehicle.X - 5),@(vehicle.Y + 3) Z"
+                          fill="@vehicle.Color" opacity="0.7" />
+                </g>
+            }
+        </svg>
+
+        <div class="map-controls">
+            <button class="control-btn" @onclick="ZoomIn" title="Zoom In"><span class="icon">🔍+</span></button>
+            <button class="control-btn" @onclick="ZoomOut" title="Zoom Out"><span class="icon">🔍−</span></button>
+            <button class="control-btn reset-btn" @onclick="ResetMap" title="Reset Map"><span class="icon">⟲</span></button>
+            <button class="control-btn @(ShowRoutes ? "active" : "")" @onclick="ToggleRoutes" title="Show/Hide Routes"><span class="icon">🛣️</span></button>
+        </div>
+
+        @if (SelectedCity != null)
+        {
+            <div class="info-panel glass">
+                <div class="info-header">
+                    <h3 style="color:@SelectedCity.Color">@SelectedCity.Name</h3>
+                    <button class="close-btn" @onclick="@(() => SelectedCity = null)">✕</button>
+                </div>
+                <div class="info-body">
+                    <p><strong>Province:</strong> @SelectedCity.Province</p>
+                    <p><strong>Population:</strong> @SelectedCity.Population</p>
+                    <button class="route-btn" @onclick="@(() => CreateRouteFrom(SelectedCity))">
+                        🚀 Plan Route
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="search-panel-wrapper glass">
+        <SearchPanel @ref="SearchPanelRef"
+                     OnCitySelected="@HandleCityFromSearch"
+                     OnRouteCreated="@HandleRouteCreated" />
+    </div>
+</div>
+
+@code {
+    private SearchPanel? SearchPanelRef;
+    private CityNode? SelectedCity;
+    private bool ShowRoutes = true;
+    private double MapZoom = 1.0;
+    private List<CityNode> Cities = new();
+    private List<RouteVisualization> ActiveRoutes = new();
+    private List<VehicleMarker> Vehicles = new();
+    private string? RouteStartCity;
+
+    // --- LOCAL DATA MODELS ---
+    public class CityNode
+    {
+        public required string Name { get; set; }
+        public required string Province { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public required string Color { get; set; }
+        public required string Population { get; set; }
+        public bool IsSelected { get; set; }
+    }
+
+    public class RouteVisualization
+    {
+        public double FromX { get; set; }
+        public double FromY { get; set; }
+        public double ToX { get; set; }
+        public double ToY { get; set; }
+        public required string Color { get; set; }
+        public int Distance { get; set; }
+        public required string FromCity { get; set; }
+        public required string ToCity { get; set; }
+    }
+
+    public class VehicleMarker
+    {
+        public double X { get; set; }
+        public double Y { get; set; }
+        public required string Color { get; set; }
+        public required string Type { get; set; }
+    }
+
+    protected override void OnInitialized()
+    {
+        InitializeCities();
+        InitializeVehicles();
+    }
+
+    private void InitializeCities()
+    {
+        Cities = new List<CityNode>
+        {
+            new() { Name = "Karachi", Province = "Sindh", X = 380, Y = 600, Color = "#ef4444", Population = "16M" },
+            new() { Name = "Lahore", Province = "Punjab", X = 450, Y = 300, Color = "#f59e0b", Population = "11M" },
+            new() { Name = "Islamabad", Province = "Federal", X = 420, Y = 220, Color = "#3b82f6", Population = "2.1M" },
+            new() { Name = "Peshawar", Province = "KPK", X = 350, Y = 180, Color = "#10b981", Population = "2.3M" },
+            new() { Name = "Quetta", Province = "Balochistan", X = 250, Y = 400, Color = "#8b5cf6", Population = "1.1M" },
+            new() { Name = "Multan", Province = "Punjab", X = 420, Y = 420, Color = "#ec4899", Population = "1.9M" },
+            new() { Name = "Faisalabad", Province = "Punjab", X = 460, Y = 350, Color = "#14b8a6", Population = "3.2M" },
+            new() { Name = "Hyderabad", Province = "Sindh", X = 420, Y = 550, Color = "#f97316", Population = "1.8M" }
+        };
+    }
+
+    private void InitializeVehicles()
+    {
+        Vehicles = new List<VehicleMarker>
+        {
+            new() { X = 380, Y = 600, Color = "#ef4444", Type = "🚗" },
+            new() { X = 450, Y = 300, Color = "#f59e0b", Type = "🚚" },
+            new() { X = 420, Y = 220, Color = "#3b82f6", Type = "🚁" }
+        };
+    }
+
+    private void SelectCity(CityNode city)
+    {
+        foreach (var c in Cities) c.IsSelected = false;
+        city.IsSelected = true;
+        SelectedCity = city;
+        StateHasChanged();
+    }
+
+    private void CreateRouteFrom(CityNode? city)
+    {
+        if (city != null)
+        {
+            RouteStartCity = city.Name;
+            SearchPanelRef?.FocusSearch();
+        }
+    }
+
+    // --- FIX FOR CS1503: TYPE MATCHING ---
+
+    // This method now accepts the SearchPanel's specific CityNode type
+    private void HandleCityFromSearch(SearchPanel.CityNode searchPanelCity)
+    {
+        // Logic to find the matching city in OUR local list
+        if (RouteStartCity != null && searchPanelCity.Name != RouteStartCity)
+        {
+            var fromCity = Cities.FirstOrDefault(c => c.Name == RouteStartCity);
+            var toCity = Cities.FirstOrDefault(c => c.Name == searchPanelCity.Name);
+
+            if (fromCity != null && toCity != null)
+            {
+                AddRoute(fromCity, toCity);
+            }
+        }
+    }
+
+    // This method now accepts the SearchPanel's specific RouteVisualization type
+    private void HandleRouteCreated(SearchPanel.RouteVisualization searchRoute)
+    {
+        // Map data from SearchPanel route to our local MapCanvas route
+        var localRoute = new RouteVisualization
+        {
+            FromX = searchRoute.FromX,
+            FromY = searchRoute.FromY,
+            ToX = searchRoute.ToX,
+            ToY = searchRoute.ToY,
+            Color = searchRoute.Color,
+            Distance = searchRoute.Distance,
+            FromCity = searchRoute.FromCity,
+            ToCity = searchRoute.ToCity
+        };
+
+        ActiveRoutes.Add(localRoute);
+        StateHasChanged();
+    }
+
+    private void AddRoute(CityNode from, CityNode to)
+    {
+        int distance = CalculateDistance(from, to);
+        var route = new RouteVisualization
+        {
+            FromX = from.X,
+            FromY = from.Y,
+            ToX = to.X,
+            ToY = to.Y,
+            Color = from.Color,
+            Distance = distance,
+            FromCity = from.Name,
+            ToCity = to.Name
+        };
+
+        ActiveRoutes.Add(route);
+        RouteStartCity = null;
+        StateHasChanged();
+    }
+
+    private int CalculateDistance(CityNode from, CityNode to)
+    {
+        // Simplified distance calculation
+        double dx = to.X - from.X;
+        double dy = to.Y - from.Y;
+        return (int)Math.Sqrt(dx * dx + dy * dy) * 5;
+    }
+
+    private void ZoomIn() => MapZoom = Math.Min(MapZoom + 0.1, 3.0);
+    private void ZoomOut() => MapZoom = Math.Max(MapZoom - 0.1, 0.5);
+    private void ResetMap()
+    {
+        MapZoom = 1.0;
+        ActiveRoutes.Clear();
+        SelectedCity = null;
+        RouteStartCity = null;
+        foreach (var city in Cities) city.IsSelected = false;
+        StateHasChanged();
+    }
+    private void ToggleRoutes() => ShowRoutes = !ShowRoutes;
+}
